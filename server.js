@@ -61,6 +61,31 @@ app.post("/products", (req, res) => {
     })
 })
 
+app.put("/products/:id", (req, res) => {
+    const id = parseInt(req.params.id)
+    const updatedData = req.body
+
+    const data = JSON.parse(fs.readFileSync("./products.json", { encoding: "utf-8" }))
+    const products = data.products
+
+    const index = products.findIndex(p => p.id === id)
+
+    if (index === -1) {
+        return res.status(404).json({ message: "Product not found" })
+    }
+
+    products[index] = { ...products[index], ...updatedData }
+
+    data.count = products.length
+
+    fs.writeFileSync("./products.json", JSON.stringify(data, null, 2))
+
+    res.status(200).json({
+        message: "Product updated successfully",
+        product: products[index]
+    })
+})
+
 app.listen(9000, () => console.log("Server running on port 9000"))
 
-
+//https://github.com/Rubio412/ServerPost.git
