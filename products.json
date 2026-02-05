@@ -1,5 +1,5 @@
 {
-  "count": 501,
+  "count": 499,
   "products": [
     {
       "id": 1001,
@@ -4970,36 +4970,6 @@
       "currency": "USD",
       "stock": 30,
       "rating": 4.4
-    },
-    {
-      "id": 1498,
-      "name": "Wireless Monitor 756",
-      "category": "Electronics",
-      "subcategory": "Monitor",
-      "price": 762.89,
-      "currency": "USD",
-      "stock": 53,
-      "rating": 4.7
-    },
-    {
-      "id": 1499,
-      "name": "Vintage Yoga Mat 975",
-      "category": "Sports",
-      "subcategory": "Yoga Mat",
-      "price": 463.04,
-      "currency": "USD",
-      "stock": 1,
-      "rating": 4.6
-    },
-    {
-      "id": 1500,
-      "name": "Vintage Vacuum 550",
-      "category": "Home & Kitchen",
-      "subcategory": "Vacuum",
-      "price": 919.03,
-      "currency": "USD",
-      "stock": 32,
-      "rating": 3.1
     },
     {
       "name": "Headphones",
