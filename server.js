@@ -1,110 +1,232 @@
-const express = require("express")
-const app = express()
-const fs = require("fs")
+const express = require("express");
+const fs = require("fs");
+const { Sequelize, DataTypes } = require("sequelize");
 
-function hasContent(str) {
-    return typeof str == "string" && str.length > 0
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+function loadFile() {
+  return JSON.parse(fs.readFileSync("./products.json", "utf8"));
 }
 
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+let fileData = loadFile();
+let products = fileData.products;
+let count = fileData.count;
 
+const fsRouter = express.Router();
+const dbRouter = express.Router();
+
+app.use("/fs", fsRouter);
+app.use("/db", dbRouter);
+
+app.get("/404", (req, res) => {
+  res.status(404).json({ message: "Not Found" });
+});
+
+// ===== MIDDLEWARE =====
 function productExists(req, res, next) {
-    const id = parseInt(req.params.id)
-    const data = JSON.parse(fs.readFileSync("./products.json", "utf8"))
-    const product = data.products.find(p => p.id === id)
+  const id = Number(req.params.id);
+  const data = loadFile();
+  const found = data.products.find(p => p.id === id);
 
-    if (!product) {
-        return res.status(404).json({ message: "Product not found" })
-    }
+  if (!found) return res.redirect("/404");
 
-    req.data = data
-    next()
+  req.data = data;
+  next();
 }
 
 function validateProduct(req, res, next) {
-    const { name, category, price } = req.body
-
-    if (!name || !category || price == null) {
-        return res.status(400).json({ message: "Invalid product data" })
-    }
-
-    next()
+  const { name, category, price } = req.body;
+  if (!name || !category || price === undefined) {
+    return res.status(400).json({ message: "Invalid product data" });
+  }
+  next();
 }
 
-app.get("/products", (req, res) => {
-    const { search, category, subcategory } = req.query
-    let { products } = JSON.parse(fs.readFileSync("./products.json", { encoding: "utf-8" }))
+fsRouter.get("/products", (req, res) => {
+  let result = [...products];
 
-    if (hasContent(category)) {
-        products = products.filter(p => p.category.toLowerCase() === category.toLowerCase())
-    }
+  if (req.query.category)
+    result = result.filter(p => p.category === req.query.category);
 
-    if (hasContent(subcategory)) {
-        products = products.filter(p => p.subcategory.toLowerCase() === subcategory.toLowerCase())
-    }
+  if (req.query.subcategory)
+    result = result.filter(p => p.subcategory === req.query.subcategory);
 
-    if (hasContent(search)) {
-        products = products.filter(p =>
-            JSON.stringify(p).toLowerCase().includes(search.toLowerCase())
-        )
-    }
+  if (req.query.search)
+    result = result.filter(p =>
+      p.name.toLowerCase().includes(req.query.search.toLowerCase())
+    );
 
-    res.json({
-        count: products.length,
-        products
-    })
-})
+  res.json(result);
+});
 
-app.get("/products/:id", productExists, (req, res) => {
-    res.json(req.product)
-})
+fsRouter.get("/products/:id", productExists, (req, res) => {
+  const id = Number(req.params.id);
+  const product = req.data.products.find(p => p.id === id);
+  res.json(product);
+});
 
-app.post("/products", validateProduct, (req, res) => {
-    const data = JSON.parse(fs.readFileSync("./products.json", "utf8"))
+fsRouter.post("/products", (req, res) => {
+  const lastId = products.length ? products[products.length - 1].id : 0;
 
-    const newProduct = {
-        id: Date.now(),
-        name: req.body.name,
-        category: req.body.category,
-        price: req.body.price
-    }
+  const newProduct = {
+    id: lastId + 1,
+    name: req.body.name,
+    category: req.body.category,
+    subcategory: req.body.subcategory,
+    price: req.body.price
+  };
 
-    data.products.push(newProduct)
+  products.push(newProduct);
+  count = products.length;
 
-    fs.writeFileSync("./products.json", JSON.stringify(data, null, 2))
+  fs.writeFileSync("./products.json", JSON.stringify({ count, products }, null, 2));
 
-    res.status(201).json(newProduct)
-})
+  res.status(201).json({ message: "Product created", product: newProduct });
+});
 
-app.put("/products/:id", productExists, validateProduct, (req, res) => {
-    const id = parseInt(req.params.id)
-    const products = req.data.products
-    const index = products.findIndex(p => p.id === id)
+fsRouter.put("/products/:id", productExists, validateProduct, (req, res) => {
+  const id = Number(req.params.id);
+  const product = products.find(p => p.id === id);
 
-    products[index] = { ...products[index], ...req.body }
-    req.data.count = products.length
+  Object.assign(product, req.body);
 
-    fs.writeFileSync("./products.json", JSON.stringify(req.data, null, 2))
+  fs.writeFileSync("./products.json", JSON.stringify({ count, products }, null, 2));
 
-    res.status(200).json({
-        message: "Product updated successfully",
-        product: products[index]
-    })
-})
+  res.json({ message: "Product updated", product });
+});
 
-app.delete("/products/:id", productExists, (req, res) => {
-    const id = parseInt(req.params.id)
-    const products = req.data.products
+fsRouter.delete("/products/:id", productExists, (req, res) => {
+  const id = Number(req.params.id);
+  products = products.filter(p => p.id !== id);
+  count = products.length;
 
-    const newList = products.filter(p => p.id !== id)
-    req.data.products = newList
+  fs.writeFileSync("./products.json", JSON.stringify({ count, products }, null, 2));
 
-    fs.writeFileSync("./products.json", JSON.stringify(req.data, null, 2))
+  res.status(204).send();
+});
 
-    res.status(204).send()
-})
+const conn = new Sequelize("products_inventory", "root", "12345678", {
+  host: "localhost",
+  dialect: "mysql"
+});
 
-app.listen(9000, () => console.log("Server running on port 9000"))
+const Category = conn.define("Category", {
+  name: { type: DataTypes.STRING, allowNull: false, unique: true }
+});
+
+const SubCategory = conn.define("SubCategory", {
+  name: { type: DataTypes.STRING, allowNull: false, unique: true },
+  category_id: { type: DataTypes.INTEGER, allowNull: false }
+});
+
+const Product = conn.define("Product", {
+  name: { type: DataTypes.STRING, allowNull: false, unique: true },
+  price: { type: DataTypes.DOUBLE.UNSIGNED, allowNull: false, defaultValue: 0 },
+  currency: { type: DataTypes.STRING, defaultValue: "USD" },
+  stock: { type: DataTypes.INTEGER.UNSIGNED, defaultValue: 0 },
+  rating: { type: DataTypes.FLOAT.UNSIGNED, defaultValue: 1 },
+  subcategory_id: { type: DataTypes.INTEGER, allowNull: false }
+});
+
+SubCategory.belongsTo(Category, { foreignKey: "category_id" });
+Product.belongsTo(SubCategory, { foreignKey: "subcategory_id" });
+
+dbRouter.get("/products", async (req, res) => {
+  const dbProducts = await Product.findAll();
+  res.json(dbProducts);
+});
+
+dbRouter.get("/products/:id", async (req, res) => {
+  const product = await Product.findByPk(req.params.id);
+  if (!product) return res.status(404).json({ message: "Product not found" });
+  res.json(product);
+});
+
+dbRouter.post("/products", async (req, res) => {
+  const created = await Product.create(req.body);
+  res.status(201).json({ message: "Product created", product: created });
+});
+
+dbRouter.put("/products/:id", async (req, res) => {
+  const product = await Product.findByPk(req.params.id);
+  if (!product) return res.status(404).json({ message: "Product not found" });
+
+  Object.assign(product, req.body);
+  await product.save();
+
+  res.json({ message: "Product updated", product });
+});
+
+dbRouter.delete("/products/:id", async (req, res) => {
+  const product = await Product.findByPk(req.params.id);
+  if (!product) return res.status(404).json({ message: "Product not found" });
+
+  await product.destroy();
+  res.status(204).send();
+});
+
+async function fillInCategories() {
+  const { products } = loadFile();
+  const categories = [...new Set(products.map(p => p.category).filter(Boolean))].sort();
+
+  for (const c of categories) {
+    await Category.findOrCreate({ where: { name: c } });
+  }
+
+  await fillInSubcategories(products);
+}
+
+async function fillInSubcategories(products) {
+  const map = new Map();
+
+  for (const p of products) {
+    if (!p.subcategory || !p.category) continue;
+    map.set(p.subcategory, p.category);
+  }
+
+  for (const [sub, cat] of map) {
+    const parent = await Category.findOne({ where: { name: cat } });
+    if (!parent) continue;
+
+    await SubCategory.findOrCreate({
+      where: {
+        name: sub,
+        category_id: parent.id
+      }
+    });
+  }
+}
+
+async function fillInProducts() {
+  await fillInCategories();
+  const { products } = loadFile();
+
+  for (const p of products) {
+    if (!p.subcategory) continue;
+
+    const sub = await SubCategory.findOne({
+      where: { name: p.subcategory }
+    });
+
+    if (!sub) continue;
+
+    await Product.findOrCreate({
+      where: { name: p.name },
+      defaults: {
+        price: p.price ?? 0,
+        currency: p.currency ?? "USD",
+        stock: p.stock ?? 0,
+        rating: p.rating ?? 1,
+        subcategory_id: sub.id
+      }
+    });
+  }
+}
+
+app.listen(9000, () => { console.log("Server running on port 9000"); 
+
+});
 
 //https://github.com/Rubio412/ServerPost.git

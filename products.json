@@ -4979,6 +4979,12 @@
       "currency": "USD",
       "stock": 20,
       "rating": 4.5
+    },
+    {
+      "id": 1770917686177,
+      "name": "Headphones Bluetooth",
+      "category": "Electronics",
+      "price": "300.00"
     }
   ]
 }
